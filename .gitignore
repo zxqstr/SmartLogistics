@@ -1,0 +1,33 @@
+# Keil 编译产物
+*.uvguix.*
+*.uvgui.*
+*.lst
+*.o
+*.d
+*.crf
+*.htm
+*.dep
+*.bak
+*.axf
+*.lnp
+*.plg
+*.iex
+*.tra
+*.map
+JLinkLog.txt
+Objects/
+Listings/
+DebugConfig/
+
+# 编辑器
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# 系统
+Thumbs.db
+Desktop.ini
+
+# 临时文件
+/tmp/
