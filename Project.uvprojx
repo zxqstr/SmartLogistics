@@ -717,6 +717,16 @@
               <FileType>1</FileType>
               <FilePath>.\Hardware\GPS.c</FilePath>
             </File>
+            <File>
+              <FileName>MySPI.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\MySPI.c</FilePath>
+            </File>
+            <File>
+              <FileName>SDCard.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\SDCard.c</FilePath>
+            </File>
           </Files>
         </Group>
       </Groups>

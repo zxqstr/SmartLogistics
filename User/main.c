@@ -5,24 +5,24 @@
 #include "Key.h"
 #include "Buzzer.h"
 #include "GPS.h"
+#include "SDCard.h"
 
 typedef enum {
 	PAGE_MAIN = 0,
-	PAGE_THRESHOLD,
+	PAGE_SD,
 	PAGE_SYSINFO,
 	PAGE_MAX
 } Page_t;
 
 static Page_t page = PAGE_MAIN;
-static float temp_max = 40.0f, temp_min = 0.0f;
-static float humi_max = 80.0f, humi_min = 20.0f;
 static float temp = 0, humi = 0;
+static float temp_max = 40.0f, humi_max = 80.0f;
+static float temp_min = 0.0f,  humi_min = 20.0f;
 
 static void ShowPageMain(void)
 {
 	OLED_ShowString(1, 1, "--Main Page-----");
 
-	/* 第2行: 温湿度 */
 	OLED_ShowString(2, 1, "T:");
 	OLED_ShowNum(2, 3, (uint32_t)temp, 2);
 	OLED_ShowString(2, 5, ".");
@@ -35,80 +35,53 @@ static void ShowPageMain(void)
 	OLED_ShowNum(2, 15, (int32_t)(humi * 10) % 10, 1);
 	OLED_ShowChar(2, 16, '%');
 
-	/* 第3行: GPS状态 */
-	{
-		static uint8_t has_data = 0;
-		static uint8_t dot = 0;
-
-		GPS_Poll();  /* 轮询接收 */
-
-		if (gps.data_ready)
-		{
-			has_data = 1;
-			dot = !dot;
-			GPS_Parse();
-		}
-
-		if (gps.valid)
-		{
-			OLED_ShowString(3, 1, "GPS:OK  Spd:");
-			OLED_ShowNum(3, 13, (uint32_t)gps.speed_kn, 2);
-			OLED_ShowString(3, 15, "kn");
-		}
-		else if (has_data)
-		{
-			if (dot)
-				OLED_ShowString(3, 1, "GPS:Searching.  ");
-			else
-				OLED_ShowString(3, 1, "GPS:Searching.. ");
-		}
-		else
-		{
-			OLED_ShowString(3, 1, "GPS:No RX:");
-			OLED_ShowNum(3, 11, gps.rx_count, 5);
-		}
+	OLED_ShowString(3, 1, "GPS:");
+	if (gps.valid) {
+		OLED_ShowNum(3, 5, (uint32_t)gps.speed_kn, 2);
+		OLED_ShowString(3, 7, "kn");
+	} else {
+		OLED_ShowString(3, 5, "No Fix");
 	}
 
-	/* 第4行: 报警状态 */
-	OLED_ShowString(4, 1, "Alarm:");
-	if (temp > temp_max)      OLED_ShowString(4, 7, "T HIGH");
-	else if (temp < temp_min) OLED_ShowString(4, 7, "T LOW ");
-	else if (humi > humi_max) OLED_ShowString(4, 7, "H HIGH");
-	else if (humi < humi_min) OLED_ShowString(4, 7, "H LOW ");
-	else                      OLED_ShowString(4, 7, "Normal");
+	OLED_ShowString(4, 1, "K1:Next K2:SD");
 }
 
-static void ShowPageThreshold(void)
+static void ShowPageSD(void)
 {
-	OLED_ShowString(1, 1, "--Thresholds----");
-	OLED_ShowString(2, 1, "Tmax:");
-	OLED_ShowNum(2, 6, (uint32_t)temp_max, 2);
-	OLED_ShowString(2, 8, "C");
+	OLED_ShowString(1, 1, "--SD Card Test--");
 
-	OLED_ShowString(2, 11, "Tmin:");
-	OLED_ShowNum(2, 16, (uint32_t)temp_min, 1);
+	uint32_t sec = SD_GetSectorCount();
+	uint8_t  typ = SD_GetType();
 
-	OLED_ShowString(3, 1, "Hmax:");
-	OLED_ShowNum(3, 6, (uint32_t)humi_max, 2);
-	OLED_ShowString(3, 8, "%");
+	if (typ == SD_TYPE_ERR)
+	{
+		OLED_ShowString(2, 1, "SD: Not Found!");
+		OLED_ShowString(3, 1, "Check wiring");
+	}
+	else
+	{
+		OLED_ShowString(2, 1, "SD: Found!");
+		OLED_ShowString(2, 11, "T:");
+		OLED_ShowNum(2, 13, typ, 1);
 
-	OLED_ShowString(3, 11, "Hmin:");
-	OLED_ShowNum(3, 16, (uint32_t)humi_min, 1);
-
-	OLED_ShowString(4, 1, "K1:Next K2/3:+/-");
+		OLED_ShowString(3, 1, "Size:");
+		OLED_ShowNum(3, 7, sec / 2048, 6);  /* MB */
+		OLED_ShowString(3, 13, "MB");
+	}
+	OLED_ShowString(4, 1, "K1:Back       ");
 }
 
 static void ShowPageSysInfo(void)
 {
 	OLED_ShowString(1, 1, "--System Info---");
-	OLED_ShowString(2, 1, "FW: v0.1       ");
-	OLED_ShowString(3, 1, "Sensor: DHT11  ");
+	OLED_ShowString(2, 1, "FW: v0.2 SD+  ");
+	OLED_ShowString(3, 1, "DHT11 + SD SPI ");
 	OLED_ShowString(4, 1, "K1:Back        ");
 }
 
 int main(void)
 {
-	uint8_t key, dht_ok;
+	uint8_t key;
 	uint16_t dht_timer = 0;
 
 	OLED_Init();
@@ -117,7 +90,22 @@ int main(void)
 	Key_Init();
 	Buzzer_Init();
 	DHT11_Init();
-	GPS_Init();
+
+	/* 显示SD初始化状态 */
+	OLED_ShowString(1, 1, "Initializing...");
+	OLED_ShowString(2, 1, "SD Card Init...");
+
+	uint8_t sd_err = SD_Init();
+
+	OLED_ShowString(3, 1, "SD Ret:");
+	OLED_ShowNum(3, 8, sd_err, 1);
+	if (sd_err == 0)
+		OLED_ShowString(4, 1, "SD: OK!       ");
+	else
+		OLED_ShowString(4, 1, "SD: FAIL!     ");
+
+	Delay_ms(1500);
+	OLED_Clear();
 
 	while (1)
 	{
@@ -140,8 +128,8 @@ int main(void)
 				Buzzer_Stop();
 			break;
 
-		case PAGE_THRESHOLD:
-			ShowPageThreshold();
+		case PAGE_SD:
+			ShowPageSD();
 			break;
 
 		case PAGE_SYSINFO:
@@ -149,16 +137,14 @@ int main(void)
 			break;
 		}
 
-		/* 每2秒读一次DHT11 */
+		/* DHT11: 每2秒 */
 		dht_timer++;
-		if (dht_timer >= 100)  /* 100 × 20ms = 2000ms */
+		if (dht_timer >= 100)
 		{
 			dht_timer = 0;
-			dht_ok = (DHT11_ReadData(&temp, &humi) == 0);
-			if (!dht_ok)
+			if (DHT11_ReadData(&temp, &humi) != 0)
 			{
-				temp = 0;
-				humi = 0;
+				temp = 0; humi = 0;
 			}
 		}
 
