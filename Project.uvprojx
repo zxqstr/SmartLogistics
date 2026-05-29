@@ -702,6 +702,16 @@
               <FileType>1</FileType>
               <FilePath>.\Hardware\DHT11.c</FilePath>
             </File>
+            <File>
+              <FileName>Key.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\Key.c</FilePath>
+            </File>
+            <File>
+              <FileName>Buzzer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\Buzzer.c</FilePath>
+            </File>
           </Files>
         </Group>
       </Groups>
