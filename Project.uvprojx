@@ -712,6 +712,11 @@
               <FileType>1</FileType>
               <FilePath>.\Hardware\Buzzer.c</FilePath>
             </File>
+            <File>
+              <FileName>GPS.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\GPS.c</FilePath>
+            </File>
           </Files>
         </Group>
       </Groups>

@@ -4,6 +4,7 @@
 #include "DHT11.h"
 #include "Key.h"
 #include "Buzzer.h"
+#include "GPS.h"
 
 typedef enum {
 	PAGE_MAIN = 0,
@@ -21,6 +22,7 @@ static void ShowPageMain(void)
 {
 	OLED_ShowString(1, 1, "--Main Page-----");
 
+	/* 第2行: 温湿度 */
 	OLED_ShowString(2, 1, "T:");
 	OLED_ShowNum(2, 3, (uint32_t)temp, 2);
 	OLED_ShowString(2, 5, ".");
@@ -33,14 +35,47 @@ static void ShowPageMain(void)
 	OLED_ShowNum(2, 15, (int32_t)(humi * 10) % 10, 1);
 	OLED_ShowChar(2, 16, '%');
 
-	OLED_ShowString(3, 1, "Status:");
-	if (temp > temp_max)      OLED_ShowString(3, 8, "T HIGH ");
-	else if (temp < temp_min) OLED_ShowString(3, 8, "T LOW  ");
-	else if (humi > humi_max) OLED_ShowString(3, 8, "H HIGH ");
-	else if (humi < humi_min) OLED_ShowString(3, 8, "H LOW  ");
-	else                      OLED_ShowString(3, 8, "Normal ");
+	/* 第3行: GPS状态 */
+	{
+		static uint8_t has_data = 0;
+		static uint8_t dot = 0;
 
-	OLED_ShowString(4, 1, "K1:Next K2:Beep");
+		GPS_Poll();  /* 轮询接收 */
+
+		if (gps.data_ready)
+		{
+			has_data = 1;
+			dot = !dot;
+			GPS_Parse();
+		}
+
+		if (gps.valid)
+		{
+			OLED_ShowString(3, 1, "GPS:OK  Spd:");
+			OLED_ShowNum(3, 13, (uint32_t)gps.speed_kn, 2);
+			OLED_ShowString(3, 15, "kn");
+		}
+		else if (has_data)
+		{
+			if (dot)
+				OLED_ShowString(3, 1, "GPS:Searching.  ");
+			else
+				OLED_ShowString(3, 1, "GPS:Searching.. ");
+		}
+		else
+		{
+			OLED_ShowString(3, 1, "GPS:No RX:");
+			OLED_ShowNum(3, 11, gps.rx_count, 5);
+		}
+	}
+
+	/* 第4行: 报警状态 */
+	OLED_ShowString(4, 1, "Alarm:");
+	if (temp > temp_max)      OLED_ShowString(4, 7, "T HIGH");
+	else if (temp < temp_min) OLED_ShowString(4, 7, "T LOW ");
+	else if (humi > humi_max) OLED_ShowString(4, 7, "H HIGH");
+	else if (humi < humi_min) OLED_ShowString(4, 7, "H LOW ");
+	else                      OLED_ShowString(4, 7, "Normal");
 }
 
 static void ShowPageThreshold(void)
@@ -82,6 +117,7 @@ int main(void)
 	Key_Init();
 	Buzzer_Init();
 	DHT11_Init();
+	GPS_Init();
 
 	while (1)
 	{
