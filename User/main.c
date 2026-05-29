@@ -10,6 +10,7 @@
 
 typedef enum {
 	PAGE_MAIN = 0,
+	PAGE_GPS,
 	PAGE_SD,
 	PAGE_SYSINFO,
 	PAGE_MAX
@@ -34,8 +35,61 @@ static void ShowPageMain(void)
 	OLED_ShowNum(2, 15, (int32_t)(humi * 10) % 10, 1);
 	OLED_ShowChar(2, 16, '%');
 
-	OLED_ShowString(3, 1, "GPS: No Fix    ");
-	OLED_ShowString(4, 1, "K1:Next K2:SD ");
+	OLED_ShowString(3, 1, "GPS:");
+	if (gps.valid)
+	{
+		OLED_ShowString(3, 5, "OK  ");
+		OLED_ShowNum(3, 10, gps.rx_count / 10, 5);
+	}
+	else
+	{
+		OLED_ShowString(3, 5, "Wait");
+		OLED_ShowNum(3, 10, gps.rx_count / 10, 4);
+	}
+
+	OLED_ShowString(4, 1, "K1:Next K2:Beep");
+}
+
+static void ShowPageGPS(void)
+{
+	OLED_ShowString(1, 1, "--GPS Data------");
+
+	if (gps.valid)
+	{
+		/* 行2: 纬度(xx.xx) + 经度(xxx.xx), 紧凑显示 */
+		int32_t lat_d = (int32_t)gps.latitude;
+		int32_t lat_m = (int32_t)(gps.latitude * 100) % 100;
+		int32_t lon_d = (int32_t)gps.longitude;
+		int32_t lon_m = (int32_t)(gps.longitude * 100) % 100;
+
+		OLED_ShowString(2, 1, "L:");
+		OLED_ShowNum(2, 3, lat_d <= 99 ? lat_d : lat_d % 100, 2);
+		OLED_ShowString(2, 5, ".");
+		OLED_ShowNum(2, 6, lat_m, 2);
+
+		OLED_ShowString(2, 9, "E:");
+		OLED_ShowNum(2, 11, lon_d <= 999 ? lon_d : lon_d % 1000, 3);
+		OLED_ShowString(2, 14, ".");
+		OLED_ShowNum(2, 15, lon_m, 1);
+
+		/* 行3: 速度 */
+		uint16_t speed = (uint16_t)(gps.speed_kn * 1.852f);
+		OLED_ShowString(3, 1, "Spd:");
+		OLED_ShowNum(3, 5, speed, 3);
+		OLED_ShowString(3, 8, "km/h");
+
+		/* 行4: 卫星数据 */
+		OLED_ShowString(4, 1, "RX:");
+		OLED_ShowNum(4, 4, gps.rx_count / 100, 4);
+		OLED_ShowString(4, 9, "OK");
+	}
+	else
+	{
+		OLED_ShowString(2, 1, "Waiting fix...");
+		OLED_ShowString(3, 1, "RX bytes:");
+		OLED_ShowNum(3, 10, gps.rx_count, 5);
+		OLED_ShowString(4, 1, "GPS LED=1Hz=OK");
+	}
 }
 
 static void ShowPageSD(void)
@@ -48,7 +102,6 @@ static void ShowPageSD(void)
 
 	OLED_ShowString(1, 1, "--SD FATFS Test-");
 
-	/* 挂载 */
 	res = f_mount(&fs, "0:", 1);
 	if (res != FR_OK)
 	{
@@ -58,7 +111,6 @@ static void ShowPageSD(void)
 	}
 	OLED_ShowString(2, 1, "Mount:OK       ");
 
-	/* 写测试文件 */
 	res = f_open(&file, "0:test.txt", FA_CREATE_ALWAYS | FA_WRITE);
 	if (res != FR_OK)
 	{
@@ -67,11 +119,10 @@ static void ShowPageSD(void)
 		return;
 	}
 
-	f_printf(&file, "STM32 SD Card Test OK!\n");
+	f_printf(&file, "STM32 SD Card OK!\n");
 	f_printf(&file, "T=%.1fC H=%.1f%%\n", temp, humi);
 	f_close(&file);
 
-	/* 读回验证 */
 	res = f_open(&file, "0:test.txt", FA_READ);
 	if (res != FR_OK)
 	{
@@ -85,16 +136,16 @@ static void ShowPageSD(void)
 	f_close(&file);
 
 	OLED_ShowString(3, 1, "Write+Read: OK ");
-	OLED_ShowString(4, 1, buf);  /* 第4行显示前16字节 */
+	OLED_ShowString(4, 1, buf);
 
-	f_mount(0, "0:", 0);  /* 卸载 */
+	f_mount(0, "0:", 0);
 }
 
 static void ShowPageSysInfo(void)
 {
 	OLED_ShowString(1, 1, "--System Info---");
-	OLED_ShowString(2, 1, "FW: v0.3 FATFS ");
-	OLED_ShowString(3, 1, "DHT11+SD+FATFS ");
+	OLED_ShowString(2, 1, "FW: v0.4 GPS+  ");
+	OLED_ShowString(3, 1, "DHT11+SD+GPS   ");
 	OLED_ShowString(4, 1, "K1:Back        ");
 }
 
@@ -110,16 +161,17 @@ int main(void)
 	Key_Init();
 	Buzzer_Init();
 	DHT11_Init();
+	OLED_ShowString(2, 1, "GPS Init...");
+	GPS_Init();
 
-	OLED_ShowString(2, 1, "SD Init...");
+	OLED_ShowString(3, 1, "SD Init...");
 	uint8_t sd_err = SD_Init();
-	OLED_ShowString(3, 1, "SD:");
+	OLED_ShowString(4, 1, "SD:");
 	if (sd_err == 0)
-		OLED_ShowString(3, 4, "OK  ");
-	else
-	{
-		OLED_ShowString(3, 4, "ERR ");
-		OLED_ShowNum(3, 8, sd_err, 1);
+		OLED_ShowString(4, 4, "OK  ");
+	else {
+		OLED_ShowString(4, 4, "ERR ");
+		OLED_ShowNum(4, 8, sd_err, 1);
 	}
 
 	Delay_ms(1500);
@@ -139,10 +191,12 @@ int main(void)
 		{
 		case PAGE_MAIN:
 			ShowPageMain();
-			if (key == KEY_K2)
-				Buzzer_Alarm(ALARM_TEMP_HIGH);
-			if (key == KEY_K3)
-				Buzzer_Stop();
+			if (key == KEY_K2) Buzzer_Alarm(ALARM_TEMP_HIGH);
+			if (key == KEY_K3) Buzzer_Stop();
+			break;
+
+		case PAGE_GPS:
+			ShowPageGPS();
 			break;
 
 		case PAGE_SD:
@@ -156,9 +210,13 @@ int main(void)
 			break;
 		}
 
+		/* 后台GPS轮询(主界面也收数据) */
+		GPS_Poll();
+		if (gps.data_ready) GPS_Parse();
+
+		/* DHT11每2秒 */
 		dht_timer++;
-		if (dht_timer >= 100)
-		{
+		if (dht_timer >= 100) {
 			dht_timer = 0;
 			if (DHT11_ReadData(&temp, &humi) != 0)
 				temp = 0, humi = 0;
