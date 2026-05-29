@@ -1,0 +1,297 @@
+ESP-AT 固件完整 MQTT AT 指令手册
+本文档基于乐鑫官方 ESP-AT 用户指南整理，涵盖所有 MQTT 相关 AT 命令的功能、语法、参数、响应、示例及错误码、通用说明，适用于 ESP32/ESP32-S2/ESP32-C3/ESP8266 系列芯片（ESP8266 有特殊限制）。
+一、MQTT AT 命令总览
+ESP-AT 提供完整的 MQTT 客户端功能，支持 TCP/WebSocket 传输、TLS 加密（ESP8266 除外）、长参数设置、二进制消息发布、自动重连等特性。所有命令均以 AT+MQTT 开头，核心命令如下：
+表格
+命令	功能
+AT+MQTTUSERCFG	配置 MQTT 基础用户属性（传输协议、客户端 ID、用户名、密码等）
+AT+MQTTLONGCLIENTID	设置超长 MQTT 客户端 ID（最长 1024 字节）
+AT+MQTTLONGUSERNAME	设置超长 MQTT 登录用户名（最长 1024 字节）
+AT+MQTTLONGPASSWORD	设置超长 MQTT 登录密码（最长 1024 字节）
+AT+MQTTCONNCFG	配置 MQTT 连接参数（心跳、清理会话、遗嘱消息等）
+AT+MQTTCONN	连接 / 查询 MQTT Broker
+AT+MQTTPUB	发布字符串格式的 MQTT 消息
+AT+MQTTPUBRAW	发布二进制格式的 MQTT 消息
+AT+MQTTSUB	订阅 / 查询 MQTT 主题
+AT+MQTTUNSUB	取消订阅 MQTT 主题
+AT+MQTTCLEAN	断开 MQTT 连接并释放资源
+二、详细命令说明
+1. AT+MQTTUSERCFG：设置 MQTT 用户属性
+功能：配置 MQTT 客户端的核心属性，包括传输协议、身份认证信息、证书索引等，是所有 MQTT 操作的前置命令。
+命令格式
+plaintext
+AT+MQTTUSERCFG=<LinkID>,<scheme>,<"client_id">,<"username">,<"password">,<cert_key_ID>,<CA_ID>,<"path">
+参数说明
+表格
+参数	取值范围	说明
+LinkID	固定为 0	当前仅支持单 MQTT 连接
+scheme	1/2/3/4/5/6/7/8/9/10	传输协议类型：
+1: MQTT over TCP
+2: MQTT over TLS（不校验证书）
+3: MQTT over TLS（校验服务器证书）
+4: MQTT over TLS（提供客户端证书）
+5: MQTT over TLS（双向认证）
+6: MQTT over WebSocket（TCP）
+7: MQTT over WebSocket Secure（TLS，不校验证书）
+8: MQTT over WebSocket Secure（TLS，校验服务器证书）
+9: MQTT over WebSocket Secure（TLS，提供客户端证书）
+10: MQTT over WebSocket Secure（TLS，双向认证）
+⚠️ ESP8266 限制：仅支持 1（TCP）和 6（WebSocket），不支持任何 TLS 模式
+client_id	最长 256 字节	MQTT 客户端 ID，若需更长 ID 请使用 AT+MQTTLONGCLIENTID
+username	最长 64 字节	MQTT 登录用户名，若需更长请使用 AT+MQTTLONGUSERNAME
+password	最长 64 字节	MQTT 登录密码，若需更长请使用 AT+MQTTLONGPASSWORD
+cert_key_ID	固定为 0	客户端证书索引，当前仅支持 1 套证书
+CA_ID	固定为 0	CA 证书索引，当前仅支持 1 套 CA
+path	最长 32 字节	WebSocket 路径（如 /mqtt），TCP 模式填空字符串 ""
+响应
+成功：OK
+失败：ERROR
+示例
+plaintext
+# ESP32 配置 MQTT over TCP，客户端ID为"esp32_client"，无用户名密码
+AT+MQTTUSERCFG=0,1,"esp32_client","","",0,0,""
+OK
+
+# ESP8266 配置 MQTT over WebSocket，路径为"/ws"
+AT+MQTTUSERCFG=0,6,"esp8266_ws","","",0,0,"/ws"
+OK
+2. AT+MQTTLONGCLIENTID：设置超长 MQTT 客户端 ID
+功能：解决 AT+MQTTUSERCFG 中客户端 ID 长度限制（最长 1024 字节），需在 AT+MQTTUSERCFG 之后执行。
+命令格式
+plaintext
+AT+MQTTLONGCLIENTID=<LinkID>,<length>
+参数说明
+LinkID：固定为 0
+length：客户端 ID 长度，范围 [1,1024]
+响应流程
+发送命令后返回 OK，表示准备接收客户端 ID
+输入指定长度的客户端 ID（无需换行）
+接收完成后返回 OK
+示例
+plaintext
+# 设置长度为100的客户端ID
+AT+MQTTLONGCLIENTID=0,100
+OK
+# 此处输入100字节的客户端ID
+OK
+3. AT+MQTTLONGUSERNAME：设置超长 MQTT 用户名
+功能：设置最长 1024 字节的 MQTT 登录用户名，需在 AT+MQTTUSERCFG 之后执行。
+命令格式
+plaintext
+AT+MQTTLONGUSERNAME=<LinkID>,<length>
+参数说明
+LinkID：固定为 0
+length：用户名长度，范围 [1,1024]
+响应流程
+同 AT+MQTTLONGCLIENTID
+4. AT+MQTTLONGPASSWORD：设置超长 MQTT 密码
+功能：设置最长 1024 字节的 MQTT 登录密码，需在 AT+MQTTUSERCFG 之后执行。
+命令格式
+plaintext
+AT+MQTTLONGPASSWORD=<LinkID>,<length>
+参数说明
+LinkID：固定为 0
+length：密码长度，范围 [1,1024]
+响应流程
+同 AT+MQTTLONGCLIENTID
+5. AT+MQTTCONNCFG：设置 MQTT 连接属性
+功能：配置 MQTT 连接的高级参数，包括心跳间隔、清理会话、遗嘱消息等。
+命令格式
+plaintext
+AT+MQTTCONNCFG=<LinkID>,<keepalive>,<disable_clean_session>,<"lwt_topic">,<"lwt_msg">,<lwt_qos>,<lwt_retain>
+参数说明
+表格
+参数	取值范围	默认值	说明
+LinkID	固定为 0	-	-
+keepalive	0~7200（秒）	120	MQTT 心跳超时时间，0 会被强制改为 120
+disable_clean_session	0/1	0	清理会话标志：
+0: 使能清理会话
+1: 禁用清理会话
+lwt_topic	最长 128 字节	""	遗嘱主题
+lwt_msg	最长 64 字节	""	遗嘱消息内容
+lwt_qos	0/1/2	0	遗嘱消息 QoS 等级
+lwt_retain	0/1	0	遗嘱消息保留标志
+响应
+成功：OK
+失败：ERROR
+示例
+plaintext
+# 配置心跳60秒，禁用清理会话，设置遗嘱主题"device/status"，遗嘱消息"offline"，QoS1
+AT+MQTTCONNCFG=0,60,1,"device/status","offline",1,0
+OK
+6. AT+MQTTCONN：连接 / 查询 MQTT Broker
+功能：查询当前 MQTT 连接状态，或连接指定的 MQTT Broker。
+查询命令
+plaintext
+AT+MQTTCONN?
+响应：
+plaintext
++MQTTCONN:<LinkID>,<state>,<scheme>,"<host>",<port>,"<path>",<reconnect>
+OK
+state：连接状态：
+0: 未初始化
+1: 已设置用户配置
+2: 已设置连接配置
+3: 连接已断开
+4: 已建立连接
+5: 已连接但未订阅主题
+6: 已连接且已订阅主题
+其他参数同 AT+MQTTUSERCFG
+设置命令
+plaintext
+AT+MQTTCONN=<LinkID>,"<host>",<port>,<reconnect>
+参数说明：
+host：MQTT Broker 域名 / IP，最长 128 字节
+port：Broker 端口（如 1883、8883、8083）
+reconnect：自动重连：0 = 禁用，1 = 启用（会消耗更多内存）
+响应：
+成功：OK
+失败：ERROR（含错误码）
+示例
+plaintext
+# 连接公共 MQTT Broker test.mosquitto.org，端口1883，启用自动重连
+AT+MQTTCONN=0,"test.mosquitto.org",1883,1
+OK
+
+# 查询连接状态
+AT+MQTTCONN?
++MQTTCONN:0,4,1,"test.mosquitto.org",1883,"",1
+OK
+7. AT+MQTTPUB：发布字符串格式 MQTT 消息
+功能：发布纯字符串格式的 MQTT 消息，总命令长度不超过 256 字节。
+命令格式
+plaintext
+AT+MQTTPUB=<LinkID>,"<topic>","<data>",<qos>,<retain>
+参数说明
+topic：发布主题，最长 128 字节
+data：字符串消息内容（不能包含 \0，否则用 AT+MQTTPUBRAW）
+qos：消息 QoS 等级（0/1/2）
+retain：保留消息标志（0/1）
+响应
+成功：OK
+失败：ERROR（含错误码）
+示例
+plaintext
+# 向主题"esp32/sensor"发布QoS0的字符串消息"temperature:25.5"
+AT+MQTTPUB=0,"esp32/sensor","temperature:25.5",0,0
+OK
+
+# 发布JSON格式消息（注意转义双引号和逗号）
+AT+MQTTPUB=0,"esp32/data","{\"temp\":25.5\,\"humidity\":60}",1,0
+OK
+8. AT+MQTTPUBRAW：发布二进制格式 MQTT 消息
+功能：发布任意二进制数据（包括含 \0 的数据），支持更长消息长度。
+命令格式
+plaintext
+AT+MQTTPUBRAW=<LinkID>,"<topic>",<length>,<qos>,<retain>
+参数说明
+topic：发布主题，最长 128 字节
+length：二进制数据长度
+ESP32：受可用内存限制
+ESP8266：受 MQTT_BUFFER_SIZE_BYTE 宏限制（默认 512 字节，可编译修改）
+qos：消息 QoS 等级（0/1/2）
+retain：保留消息标志（0/1）
+响应流程
+发送命令后返回 OK 和 >，表示准备接收二进制数据
+输入指定长度的二进制数据（无需换行）
+传输完成后返回：
+成功：+MQTTPUB:OK
+失败：+MQTTPUB:FAIL
+示例
+plaintext
+# 向主题"esp32/bin"发布10字节二进制数据，QoS1
+AT+MQTTPUBRAW=0,"esp32/bin",10,1,0
+OK
+>
+# 此处输入10字节二进制数据
++MQTTPUB:OK
+9. AT+MQTTSUB：订阅 / 查询 MQTT 主题
+功能：查询已订阅的主题，或订阅指定主题并指定 QoS 等级。
+查询命令
+plaintext
+AT+MQTTSUB?
+响应：
+plaintext
++MQTTSUB:<LinkID>,<state>,"<topic1>",<qos1>
++MQTTSUB:<LinkID>,<state>,"<topic2>",<qos2>
+...
+OK
+设置命令
+plaintext
+AT+MQTTSUB=<LinkID>,"<topic>",<qos>
+参数说明：
+topic：订阅主题（支持通配符 + 和 #）
+qos：订阅 QoS 等级（0/1/2）
+响应：
+成功：OK
+已订阅过：ALREADY SUBSCRIBE
+失败：ERROR
+主动上报：收到订阅主题的消息时，自动上报：
+plaintext
++MQTTSUBRECV:<LinkID>,"<topic>",<data_length>,<data>
+示例
+plaintext
+# 订阅主题"esp32/control"，QoS1
+AT+MQTTSUB=0,"esp32/control",1
+OK
+
+# 收到消息时的上报
++MQTTSUBRECV:0,"esp32/control",5,"hello"
+10. AT+MQTTUNSUB：取消订阅 MQTT 主题
+功能：取消已订阅的 MQTT 主题。
+命令格式
+plaintext
+AT+MQTTUNSUB=<LinkID>,"<topic>"
+参数说明
+topic：要取消订阅的主题
+响应
+成功：OK
+未订阅过：NO UNSUBSCRIBE
+失败：ERROR
+示例
+plaintext
+# 取消订阅主题"esp32/control"
+AT+MQTTUNSUB=0,"esp32/control"
+OK
+11. AT+MQTTCLEAN：断开 MQTT 连接
+功能：断开与 MQTT Broker 的连接，释放所有相关资源。
+命令格式
+plaintext
+AT+MQTTCLEAN=<LinkID>
+参数说明
+LinkID：固定为 0
+响应
+成功：OK
+失败：ERROR
+示例
+plaintext
+AT+MQTTCLEAN=0
+OK
+三、MQTT AT 错误码
+所有 MQTT 错误均以 ERR CODE:0x60xxxxxx 格式输出，核心错误码如下：
+表格
+错误码	错误类型	说明
+0x6001	AT_MQTT_NO_CONFIGURED	未配置 MQTT 用户属性
+0x6004	AT_MQTT_ALREADY_CONNECTED	已连接 MQTT Broker
+0x6005	AT_MQTT_MALLOC_FAILED	内存分配失败
+0x6009	AT_MQTT_TLS_CONFIG_ERROR	TLS 配置错误（ESP8266 不支持 TLS）
+0x600B	AT_MQTT_CLIENT_START_FAILED	MQTT 客户端启动失败
+0x600C	AT_MQTT_CLIENT_PUBLISH_FAILED	消息发布失败
+0x600D	AT_MQTT_CLIENT_SUBSCRIBE_FAILED	主题订阅失败
+0x600E	AT_MQTT_CLIENT_UNSUBSCRIBE_FAILED	取消订阅失败
+0x6051	AT_MQTT_IN_DISCONNECTED_STATE	MQTT 连接已断开
+0x6052	AT_MQTT_HOSTNAME_VERIFY_FAILED	服务器域名验证失败
+四、通用说明与注意事项
+命令执行顺序：必须先执行 AT+MQTTUSERCFG → 可选 AT+MQTTCONNCFG → AT+MQTTCONN → 发布 / 订阅 → AT+MQTTCLEAN。
+超时时间：
+普通 MQTT 命令（发布 / 订阅）超时时间为 10 秒
+AT+MQTTCONN 超时时间更长（TLS 握手每个数据包超时 10 秒）
+主动上报消息：
+连接建立：+MQTTCONNECTED:<LinkID>,<scheme>,"<host>",<port>,"<path>",<reconnect>
+连接断开：+MQTTDISCONNECTED:<LinkID>
+收到订阅消息：+MQTTSUBRECV:<LinkID>,"<topic>",<data_length>,<data>
+ESP8266 特殊限制：
+不支持任何 MQTT over TLS 模式（scheme 只能为 1 或 6）
+二进制消息最大长度受 MQTT_BUFFER_SIZE_BYTE 限制（默认 512 字节）
+自动重连：启用 reconnect=1 后，连接断开会自动重连，但会消耗更多内存资源。
+命令长度限制：单条 AT 命令总长度不能超过 256 字节，超长参数需使用对应的 LONG 系列命令。
