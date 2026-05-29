@@ -727,6 +727,21 @@
               <FileType>1</FileType>
               <FilePath>.\Hardware\SDCard.c</FilePath>
             </File>
+            <File>
+              <FileName>ff.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\ff.c</FilePath>
+            </File>
+            <File>
+              <FileName>diskio.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\diskio.c</FilePath>
+            </File>
+            <File>
+              <FileName>DataLog.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\DataLog.c</FilePath>
+            </File>
           </Files>
         </Group>
       </Groups>

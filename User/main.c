@@ -6,6 +6,7 @@
 #include "Buzzer.h"
 #include "GPS.h"
 #include "SDCard.h"
+#include "ff.h"
 
 typedef enum {
 	PAGE_MAIN = 0,
@@ -16,8 +17,6 @@ typedef enum {
 
 static Page_t page = PAGE_MAIN;
 static float temp = 0, humi = 0;
-static float temp_max = 40.0f, humi_max = 80.0f;
-static float temp_min = 0.0f,  humi_min = 20.0f;
 
 static void ShowPageMain(void)
 {
@@ -35,47 +34,67 @@ static void ShowPageMain(void)
 	OLED_ShowNum(2, 15, (int32_t)(humi * 10) % 10, 1);
 	OLED_ShowChar(2, 16, '%');
 
-	OLED_ShowString(3, 1, "GPS:");
-	if (gps.valid) {
-		OLED_ShowNum(3, 5, (uint32_t)gps.speed_kn, 2);
-		OLED_ShowString(3, 7, "kn");
-	} else {
-		OLED_ShowString(3, 5, "No Fix");
-	}
-
-	OLED_ShowString(4, 1, "K1:Next K2:SD");
+	OLED_ShowString(3, 1, "GPS: No Fix    ");
+	OLED_ShowString(4, 1, "K1:Next K2:SD ");
 }
 
 static void ShowPageSD(void)
 {
-	OLED_ShowString(1, 1, "--SD Card Test--");
+	FATFS fs;
+	FIL   file;
+	FRESULT res;
+	char buf[32];
+	UINT br;
 
-	uint32_t sec = SD_GetSectorCount();
-	uint8_t  typ = SD_GetType();
+	OLED_ShowString(1, 1, "--SD FATFS Test-");
 
-	if (typ == SD_TYPE_ERR)
+	/* 挂载 */
+	res = f_mount(&fs, "0:", 1);
+	if (res != FR_OK)
 	{
-		OLED_ShowString(2, 1, "SD: Not Found!");
-		OLED_ShowString(3, 1, "Check wiring");
+		OLED_ShowString(2, 1, "Mount FAIL:");
+		OLED_ShowNum(2, 12, res, 1);
+		return;
 	}
-	else
-	{
-		OLED_ShowString(2, 1, "SD: Found!");
-		OLED_ShowString(2, 11, "T:");
-		OLED_ShowNum(2, 13, typ, 1);
+	OLED_ShowString(2, 1, "Mount:OK       ");
 
-		OLED_ShowString(3, 1, "Size:");
-		OLED_ShowNum(3, 7, sec / 2048, 6);  /* MB */
-		OLED_ShowString(3, 13, "MB");
+	/* 写测试文件 */
+	res = f_open(&file, "0:test.txt", FA_CREATE_ALWAYS | FA_WRITE);
+	if (res != FR_OK)
+	{
+		OLED_ShowString(3, 1, "Open FAIL:");
+		OLED_ShowNum(3, 11, res, 1);
+		return;
 	}
-	OLED_ShowString(4, 1, "K1:Back       ");
+
+	f_printf(&file, "STM32 SD Card Test OK!\n");
+	f_printf(&file, "T=%.1fC H=%.1f%%\n", temp, humi);
+	f_close(&file);
+
+	/* 读回验证 */
+	res = f_open(&file, "0:test.txt", FA_READ);
+	if (res != FR_OK)
+	{
+		OLED_ShowString(3, 1, "Read FAIL:");
+		OLED_ShowNum(3, 11, res, 1);
+		return;
+	}
+
+	f_read(&file, buf, 31, &br);
+	buf[br] = '\0';
+	f_close(&file);
+
+	OLED_ShowString(3, 1, "Write+Read: OK ");
+	OLED_ShowString(4, 1, buf);  /* 第4行显示前16字节 */
+
+	f_mount(0, "0:", 0);  /* 卸载 */
 }
 
 static void ShowPageSysInfo(void)
 {
 	OLED_ShowString(1, 1, "--System Info---");
-	OLED_ShowString(2, 1, "FW: v0.2 SD+  ");
-	OLED_ShowString(3, 1, "DHT11 + SD SPI ");
+	OLED_ShowString(2, 1, "FW: v0.3 FATFS ");
+	OLED_ShowString(3, 1, "DHT11+SD+FATFS ");
 	OLED_ShowString(4, 1, "K1:Back        ");
 }
 
@@ -86,23 +105,22 @@ int main(void)
 
 	OLED_Init();
 	OLED_Clear();
+	OLED_ShowString(1, 1, "Booting...");
 
 	Key_Init();
 	Buzzer_Init();
 	DHT11_Init();
 
-	/* 显示SD初始化状态 */
-	OLED_ShowString(1, 1, "Initializing...");
-	OLED_ShowString(2, 1, "SD Card Init...");
-
+	OLED_ShowString(2, 1, "SD Init...");
 	uint8_t sd_err = SD_Init();
-
-	OLED_ShowString(3, 1, "SD Ret:");
-	OLED_ShowNum(3, 8, sd_err, 1);
+	OLED_ShowString(3, 1, "SD:");
 	if (sd_err == 0)
-		OLED_ShowString(4, 1, "SD: OK!       ");
+		OLED_ShowString(3, 4, "OK  ");
 	else
-		OLED_ShowString(4, 1, "SD: FAIL!     ");
+	{
+		OLED_ShowString(3, 4, "ERR ");
+		OLED_ShowNum(3, 8, sd_err, 1);
+	}
 
 	Delay_ms(1500);
 	OLED_Clear();
@@ -111,7 +129,6 @@ int main(void)
 	{
 		key = Key_Scan();
 
-		/* K1: 切换界面 */
 		if (key == KEY_K1)
 		{
 			page = (page + 1) % PAGE_MAX;
@@ -129,7 +146,9 @@ int main(void)
 			break;
 
 		case PAGE_SD:
-			ShowPageSD();
+			{	static uint8_t tested = 0;
+				if (!tested) { ShowPageSD(); tested = 1; }
+			}
 			break;
 
 		case PAGE_SYSINFO:
@@ -137,15 +156,12 @@ int main(void)
 			break;
 		}
 
-		/* DHT11: 每2秒 */
 		dht_timer++;
 		if (dht_timer >= 100)
 		{
 			dht_timer = 0;
 			if (DHT11_ReadData(&temp, &humi) != 0)
-			{
-				temp = 0; humi = 0;
-			}
+				temp = 0, humi = 0;
 		}
 
 		Buzzer_Tick();

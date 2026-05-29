@@ -2,12 +2,9 @@
 #define _DISKIO_H
 
 #include "stm32f10x.h"
+#include "ff.h"
 
-/* FATFS需要的类型定义 */
-typedef uint8_t  BYTE;
-typedef uint16_t WORD;
-typedef uint32_t DWORD;
-typedef uint64_t QWORD;
+/* FATFS需要的额外类型 */
 typedef uint32_t LBA_t;
 
 /* 磁盘状态 */

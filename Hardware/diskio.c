@@ -1,3 +1,4 @@
+#include "ff.h"
 #include "diskio.h"
 #include "SDCard.h"
 
