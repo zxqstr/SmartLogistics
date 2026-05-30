@@ -15,10 +15,10 @@
 #define MQTT_HOST       "sh-3-mqtt.iot-api.com"
 #define MQTT_PORT       1883
 #define MQTT_CLIENT_ID  "stm32_logistics_001"
-#define MQTT_USER       "q0cjd5u4zbkamop1"
+#define MQTT_USER       "zeuvo9xmc7izfyv5"
 #define MQTT_PASS       "TIitoajQdg"
-#define MQTT_PUB_TOPIC  "device/data"
-#define MQTT_SUB_TOPIC  "device/cmd"
+#define MQTT_PUB_TOPIC  "attributes"
+#define MQTT_SUB_TOPIC  "attributes/push"
 
 typedef enum {
 	PAGE_MAIN = 0, PAGE_GPS, PAGE_SD, PAGE_WIFI, PAGE_SYSINFO, PAGE_MAX
@@ -110,8 +110,7 @@ static void ShowPageWiFi(void)
 	if (mqtt_ok)           OLED_ShowString(2, 1, "MQTT Connected!");
 	else if (wifi_ok)      OLED_ShowString(2, 1, "WiFi OK,No MQTT");
 	else                   OLED_ShowString(2, 1, "Not Connected  ");
-	OLED_ShowString(3, 1, "Srv:");
-	OLED_ShowString(3, 5, MQTT_HOST);
+	OLED_ShowString(3, 1, "Srv:sh-3-mqtt.");
 	OLED_ShowString(4, 1, "K2:Upload Test ");
 }
 
@@ -221,7 +220,26 @@ int main(void)
 			OLED_ShowString(3, 11, "MB");
 			OLED_ShowString(4, 1, "K1:Back       ");
 			break;
-		case PAGE_WIFI: ShowPageWiFi(); break;
+		case PAGE_WIFI:
+			{	static uint8_t pub_pending = 0;
+				if (!pub_pending)
+					ShowPageWiFi();
+				if (key == KEY_K2 && mqtt_ok && !pub_pending)
+				{
+					pub_pending = 1;
+					/* JSON带逗号转义: \,"温度的逗号"也要用\,转义 */
+					char cmd[100];
+					sprintf(cmd, "AT+MQTTPUB=0,\"%s\",\"{\\\"temperature\\\":%.1f\\,\\\"humidity\\\":%.1f}\",0,0",
+					        MQTT_PUB_TOPIC, temp, humi);
+					OLED_ShowString(4, 1, "Send...        ");
+					ESP_SendAT(cmd);
+					uint8_t r = ESP_WaitOK(3000);
+					OLED_ShowString(4, 1, "Pub=");
+					OLED_ShowNum(4, 5, r, 1);
+					OLED_ShowString(4, 6, " 0=OK,1=NO");
+				}
+			}
+			break;
 		case PAGE_SYSINFO: ShowPageSysInfo(); break;
 		}
 
@@ -241,9 +259,9 @@ int main(void)
 			if (upload_timer >= 500)
 			{
 				upload_timer = 0;
-				/* 构造转义JSON: {\"t\":28.5,\"h\":65.3} */
-				char cmd[80];
-				sprintf(cmd, "AT+MQTTPUB=0,\"%s\",\"{\\\"t\\\":%.1f,\\\"h\\\":%.1f}\",0,0",
+				/* JSON逗号也需转义 */
+				char cmd[100];
+				sprintf(cmd, "AT+MQTTPUB=0,\"%s\",\"{\\\"temperature\\\":%.1f\\,\\\"humidity\\\":%.1f}\",0,0",
 				        MQTT_PUB_TOPIC, temp, humi);
 				ESP_SendAT(cmd);
 				ESP_WaitOK(3000);
