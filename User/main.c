@@ -227,10 +227,13 @@ int main(void)
 				if (key == KEY_K2 && mqtt_ok && !pub_pending)
 				{
 					pub_pending = 1;
-					/* JSON带逗号转义: \,"温度的逗号"也要用\,转义 */
-					char cmd[100];
-					sprintf(cmd, "AT+MQTTPUB=0,\"%s\",\"{\\\"temperature\\\":%.1f\\,\\\"humidity\\\":%.1f}\",0,0",
-					        MQTT_PUB_TOPIC, temp, humi);
+					char cmd[120];
+					if (gps.valid)
+						sprintf(cmd, "AT+MQTTPUB=0,\"%s\",\"{\\\"temperature\\\":%.1f\\,\\\"humidity\\\":%.1f\\,\\\"latitude\\\":%.5f\\,\\\"longitude\\\":%.5f\\,\\\"speed\\\":%.1f}\",0,0",
+						        MQTT_PUB_TOPIC, temp, humi, gps.latitude, gps.longitude, gps.speed_kn);
+					else
+						sprintf(cmd, "AT+MQTTPUB=0,\"%s\",\"{\\\"temperature\\\":%.1f\\,\\\"humidity\\\":%.1f}\",0,0",
+						        MQTT_PUB_TOPIC, temp, humi);
 					OLED_ShowString(4, 1, "Send...        ");
 					ESP_SendAT(cmd);
 					uint8_t r = ESP_WaitOK(3000);
@@ -260,9 +263,17 @@ int main(void)
 			{
 				upload_timer = 0;
 				/* JSON逗号也需转义 */
-				char cmd[100];
-				sprintf(cmd, "AT+MQTTPUB=0,\"%s\",\"{\\\"temperature\\\":%.1f\\,\\\"humidity\\\":%.1f}\",0,0",
-				        MQTT_PUB_TOPIC, temp, humi);
+				char cmd[120];
+				if (gps.valid)
+				{
+					sprintf(cmd, "AT+MQTTPUB=0,\"%s\",\"{\\\"temperature\\\":%.1f\\,\\\"humidity\\\":%.1f\\,\\\"latitude\\\":%.5f\\,\\\"longitude\\\":%.5f\\,\\\"speed\\\":%.1f}\",0,0",
+					        MQTT_PUB_TOPIC, temp, humi, gps.latitude, gps.longitude, gps.speed_kn);
+				}
+				else
+				{
+					sprintf(cmd, "AT+MQTTPUB=0,\"%s\",\"{\\\"temperature\\\":%.1f\\,\\\"humidity\\\":%.1f}\",0,0",
+					        MQTT_PUB_TOPIC, temp, humi);
+				}
 				ESP_SendAT(cmd);
 				ESP_WaitOK(3000);
 			}
